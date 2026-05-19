@@ -15,14 +15,15 @@
       body,
       #app {
         width: 100%;
-        min-height: 100%;
-        overflow: hidden;
-        overscroll-behavior: none;
+        height: 100vh;
       }
     </style>
   </head>
   <body>
     <div id="app">
+      <input type="range" min="10" max="48" value="18" id="size">
+      <input type="color" value="#222222" id="color">
+      <input type="range" min="0.1" max="100" value="1" id="zoom">
       <div id="canvas-root" class="canvas-root"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>

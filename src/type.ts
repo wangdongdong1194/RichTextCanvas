@@ -47,4 +47,5 @@ export interface EditorOptions {
   caretColor: string;
   defaultStyle: TextStyle;
   verticalAlign: VerticalAlign;
+  minZoom: number;
 }

@@ -11,25 +11,15 @@ app.style.minHeight = "400px";
 
 const editorWidth = 900;
 
-const toolbar = document.createElement("div");
-toolbar.style.width = `${editorWidth}px`;
-toolbar.style.display = "flex";
 
-const sizeRange = document.createElement("input");
-sizeRange.type = "range";
-sizeRange.min = "10";
-sizeRange.max = "48";
-sizeRange.value = "18";
+const sizeRange = document.getElementById("size") as HTMLInputElement;
+const colorInput = document.getElementById("color") as HTMLInputElement;
+const zoomRange = document.getElementById("zoom") as HTMLInputElement;
 
-const colorInput = document.createElement("input");
-colorInput.type = "color";
-colorInput.value = "#222222";
-colorInput.style.width = "30px";
-colorInput.style.height = "30px";
-colorInput.style.background = "transparent";
 
-toolbar.append(sizeRange, colorInput);
-app.appendChild(toolbar);
+app.appendChild(sizeRange);
+app.appendChild(colorInput);
+app.appendChild(zoomRange);
 
 const canvasMount = document.createElement("div");
 canvasMount.style.width = `${editorWidth}px`;
@@ -44,6 +34,10 @@ sizeRange.addEventListener("input", () => {
 
 colorInput.addEventListener("input", () => {
   editor.setColor(colorInput.value);
+});
+zoomRange.addEventListener("input", () => {
+  const value = Number(zoomRange.value);
+  editor.setZoom(value);
 });
 
 window.addEventListener("beforeunload", () => {

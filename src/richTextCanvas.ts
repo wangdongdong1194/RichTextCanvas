@@ -10,6 +10,7 @@ import type {
 export class RichTextCanvas {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly measureCtx: CanvasRenderingContext2D;
   private readonly devicePixelRatio: number;
   private canvasCssWidth: number;
   private canvasCssHeight: number;
@@ -30,6 +31,7 @@ export class RichTextCanvas {
       color: "#222222", // 默认字体颜色
     },
     verticalAlign: "bottom",
+    minZoom: 0.1,
   };
   private readonly input: HTMLTextAreaElement;
   private tokens: StyledToken[] = [];
@@ -46,6 +48,7 @@ export class RichTextCanvas {
   private blinkTimer: number | null = null;
   private currentStyle: TextStyle;
   private isComposing = false;
+  private _zoom = 1;
   private readonly measureCache = new Map<string, number>();
   private readonly handleWindowMouseMove = (event: MouseEvent): void => {
     if (!this.isSelecting) {
@@ -104,6 +107,14 @@ export class RichTextCanvas {
       throw new Error("Canvas 2D context is not available");
     }
     this.ctx = context;
+
+    const measureCanvas = document.createElement("canvas");
+    const measureContext = measureCanvas.getContext("2d");
+    if (!measureContext) {
+      throw new Error("Canvas 2D context is not available");
+    }
+    this.measureCtx = measureContext;
+
     this.applyCanvasSize(this.canvasCssWidth, this.canvasCssHeight);
 
     this.input = document.createElement("textarea");
@@ -155,6 +166,18 @@ export class RichTextCanvas {
     }
 
     this.currentStyle.color = color;
+    this.render();
+  }
+
+  setZoom(zoom: number): void {
+    const normalized = Math.max(this.options.minZoom, zoom);
+    if (Number.isNaN(normalized) || normalized === this._zoom) {
+      return;
+    }
+
+    this._zoom = normalized;
+    this.applyCanvasSize(this.canvasCssWidth, this.canvasCssHeight);
+    this.resetBlink();
     this.render();
   }
 
@@ -634,31 +657,23 @@ export class RichTextCanvas {
     this.canvasCssWidth = width;
     this.canvasCssHeight = height;
 
-    this.canvas.width = Math.max(1, Math.round(width * this.devicePixelRatio));
-    this.canvas.height = Math.max(
-      1,
-      Math.round(height * this.devicePixelRatio),
-    );
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
+    const displayWidth = width * this._zoom;
+    const displayHeight = height * this._zoom;
+    const bitmapScale = this.getBitmapScale();
 
-    // 每次重设 canvas 尺寸都会重置 transform，这里恢复到 CSS 像素坐标系。
-    this.ctx.setTransform(
-      this.devicePixelRatio,
-      0,
-      0,
-      this.devicePixelRatio,
-      0,
-      0,
-    );
+    this.canvas.width = Math.max(1, Math.round(width * bitmapScale));
+    this.canvas.height = Math.max(1, Math.round(height * bitmapScale));
+    this.canvas.style.width = `${displayWidth}px`;
+    this.canvas.style.height = `${displayHeight}px`;
   }
 
   private render(): void {
     const [start, end] = this.getSelectionRange();
+    const bitmapScale = this.getBitmapScale();
 
-    this.ctx.clearRect(0, 0, this.canvasCssWidth, this.canvasCssHeight);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.ctx.fillStyle = this.options.background;
-    this.ctx.fillRect(0, 0, this.canvasCssWidth, this.canvasCssHeight);
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     // 根据配置设置 textBaseline
     let textBaseline: CanvasTextBaseline = "top";
@@ -686,10 +701,15 @@ export class RichTextCanvas {
 
         if (item.index >= start && item.index < end) {
           this.ctx.fillStyle = this.options.selectionColor;
-          this.ctx.fillRect(item.x, line.y, item.width, line.height);
+          this.ctx.fillRect(
+            item.x * bitmapScale,
+            line.y * bitmapScale,
+            item.width * bitmapScale,
+            line.height * bitmapScale,
+          );
         }
 
-        const nextFont = `${token.style.fontSize}px ${token.style.fontFamily}`;
+        const nextFont = `${token.style.fontSize * bitmapScale}px ${token.style.fontFamily}`;
         if (nextFont !== activeFont) {
           this.ctx.font = nextFont;
           activeFont = nextFont;
@@ -702,7 +722,7 @@ export class RichTextCanvas {
         } else if (this.options.verticalAlign === "bottom") {
           y = line.y + line.height - 1;
         }
-        this.ctx.fillText(token.value, item.x, y);
+        this.ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
       }
     }
 
@@ -744,7 +764,12 @@ export class RichTextCanvas {
         y = caret.y + caret.lineHeight - height - 1;
       }
       this.ctx.fillStyle = this.options.caretColor;
-      this.ctx.fillRect(caret.x, y, 1.4, height);
+      this.ctx.fillRect(
+        caret.x * bitmapScale,
+        y * bitmapScale,
+        Math.max(1, 1.4 * bitmapScale),
+        height * bitmapScale,
+      );
     }
 
     if (this.hasFocus) {
@@ -757,8 +782,8 @@ export class RichTextCanvas {
   private syncInputPosition(): void {
     const caret = this.getCaretPosition(this.caretIndex);
     const rect = this.canvas.getBoundingClientRect();
-    const left = rect.left + caret.x;
-    const top = rect.top + caret.y + caret.lineHeight;
+    const left = rect.left + caret.x * this._zoom;
+    const top = rect.top + (caret.y + caret.lineHeight) * this._zoom;
 
     this.input.style.left = `${Math.round(left)}px`;
     this.input.style.top = `${Math.round(top)}px`;
@@ -775,8 +800,8 @@ export class RichTextCanvas {
   private getCanvasPoint(event: MouseEvent): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
     return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
+      x: (event.clientX - rect.left) / this._zoom,
+      y: (event.clientY - rect.top) / this._zoom,
     };
   }
 
@@ -865,8 +890,8 @@ export class RichTextCanvas {
       return cached;
     }
 
-    this.ctx.font = font;
-    const measuredWidth = this.ctx.measureText(token.value).width;
+    this.measureCtx.font = font;
+    const measuredWidth = this.measureCtx.measureText(token.value).width;
     const width = Math.max(1, measuredWidth);
 
     if (this.measureCache.size > 2000) {
@@ -874,6 +899,10 @@ export class RichTextCanvas {
     }
     this.measureCache.set(key, width);
     return width;
+  }
+
+  private getBitmapScale(): number {
+    return this._zoom * this.devicePixelRatio;
   }
 
   private startBlink(): void {
