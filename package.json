@@ -1,15 +1,33 @@
 {
-  "name": "textarea_canvas",
-  "version": "1.0.0",
-  "description": "",
+  "name": "rich-text-canvas",
+  "version": "1.0.1",
+  "description": "使用 Canvas 实现的富文本输入组件，支持多行输入、文本样式功能。",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "tsc"
   },
-  "keywords": [],
+  "keywords": [
+    "canvas",
+    "rich text",
+    "editor",
+    "input",
+    "textarea"
+  ],
   "author": "wangdongdong1194",
-  "license": "ISC",
+  "license": "MIT",
+  "repository": "github:wangdongdong1194/RichTextCanvas",
+  "homepage": "https://github.com/wangdongdong1194/RichTextCanvas#readme",
+  "bugs": {
+    "url": "https://github.com/wangdongdong1194/RichTextCanvas/issues"
+  },
   "devDependencies": {
     "@types/node": "^25.6.2",
     "tsx": "^4.20.6",
