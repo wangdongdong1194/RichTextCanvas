@@ -1,0 +1,19 @@
+{
+  "name": "textarea_canvas",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "wangdongdong1194",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.11"
+  }
+}
