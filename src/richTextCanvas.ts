@@ -34,6 +34,7 @@ export class RichTextCanvas {
     minZoom: 0.1,
   };
   private readonly input: HTMLTextAreaElement;
+  private readonly host: HTMLElement;
   private tokens: StyledToken[] = [];
   private lines: LayoutLine[] = [];
   private caretPositions: CaretPosition[] = [];
@@ -49,6 +50,21 @@ export class RichTextCanvas {
   private currentStyle: TextStyle;
   private isComposing = false;
   private _zoom = 1;
+  private isVisible = true;
+  private isDestroyed = false;
+  private readonly eventHandlers: {
+    input: Set<(text: string) => void>;
+    keydown: Set<(event: KeyboardEvent) => void>;
+    keyup: Set<(event: KeyboardEvent) => void>;
+    compositionend: Set<(text: string) => void>;
+    change: Set<(text: string) => void>;
+  } = {
+      input: new Set(),
+      keydown: new Set(),
+      keyup: new Set(),
+      compositionend: new Set(),
+      change: new Set(),
+    };
   private readonly measureCache = new Map<string, number>();
   private readonly handleWindowMouseMove = (event: MouseEvent): void => {
     if (!this.isSelecting) {
@@ -82,6 +98,7 @@ export class RichTextCanvas {
   };
 
   constructor(mount: HTMLElement, options?: Partial<EditorOptions>) {
+    this.host = mount;
     this.options = {
       ...this.options,
       ...options,
@@ -181,12 +198,146 @@ export class RichTextCanvas {
     this.render();
   }
 
+  setPos(x: number, y: number): void {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return;
+    }
+    const computedPosition = window.getComputedStyle(this.canvas).position;
+    if (!this.canvas.style.position && computedPosition === "static") {
+      this.canvas.style.position = "relative";
+    }
+    this.canvas.style.left = `${Math.round(x)}px`;
+    this.canvas.style.top = `${Math.round(y)}px`;
+  }
+
+  setWidth(width: number): void {
+    if (!Number.isFinite(width)) {
+      return;
+    }
+    this.options.width = Math.max(1, Math.round(width));
+    this.rebuildLayout();
+    this.render();
+  }
+
+  setHeight(height: number): void {
+    if (!Number.isFinite(height)) {
+      return;
+    }
+    this.options.height = Math.max(1, Math.round(height));
+    this.rebuildLayout();
+    this.render();
+  }
+
+  setSize(width: number, height: number): void {
+    this.setWidth(width);
+    this.setHeight(height);
+  }
+
+  hide(): void {
+    if (!this.isVisible) {
+      return;
+    }
+    this.isVisible = false;
+    this.canvas.style.display = "none";
+    this.input.blur();
+    this.hasFocus = false;
+  }
+
+  show(): void {
+    if (this.isVisible) {
+      return;
+    }
+    this.isVisible = true;
+    this.canvas.style.display = "block";
+    this.render();
+  }
+
+  isHidden(): boolean {
+    return !this.isVisible;
+  }
+
+  getText(): string {
+    return this.tokens.map((token) => token.value).join("");
+  }
+
+  setText(text: string): void {
+    const content = text ?? "";
+    this.tokens = Array.from(content).map<StyledToken>((char) => ({
+      value: char,
+      style: { ...this.currentStyle },
+    }));
+    this.caretIndex = this.tokens.length;
+    this.selectionStart = this.caretIndex;
+    this.selectionEnd = this.caretIndex;
+    this.selectionAnchor = null;
+    this.preferredCaretX = null;
+    this.rebuildLayout();
+    this.resetBlink();
+    this.render();
+    this.emit("change", this.getText());
+  }
+
+  clear(): void {
+    this.setText("");
+  }
+
+  focus(): void {
+    this.focusEditor();
+  }
+
+  blur(): void {
+    this.input.blur();
+    this.hasFocus = false;
+    this.render();
+  }
+
+  getElement(): HTMLCanvasElement {
+    return this.canvas;
+  }
+
+  getHostElement(): HTMLElement {
+    return this.host;
+  }
+
+  getSize(): { width: number; height: number; displayWidth: number; displayHeight: number } {
+    return {
+      width: this.canvasCssWidth,
+      height: this.canvasCssHeight,
+      displayWidth: this.canvasCssWidth * this._zoom,
+      displayHeight: this.canvasCssHeight * this._zoom,
+    };
+  }
+
+  getZoom(): number {
+    return this._zoom;
+  }
+
+  addEventListener(
+    event: "input" | "keydown" | "keyup" | "compositionend" | "change",
+    handler: Function,
+  ): () => void {
+    const callback = handler as (value: unknown) => void;
+    this.eventHandlers[event].add(callback as never);
+    return () => {
+      this.eventHandlers[event].delete(callback as never);
+    };
+  }
+
+  renderLine(): void {
+    this.render();
+  }
+
   destroy(): void {
+    if (this.isDestroyed) {
+      return;
+    }
+    this.isDestroyed = true;
     this.stopBlink();
     window.removeEventListener("mousemove", this.handleWindowMouseMove);
     window.removeEventListener("mouseup", this.handleWindowMouseUp);
     this.canvas.remove();
     this.input.remove();
+    this.lines = [];
   }
 
   getLines(): LayoutLine[] {
@@ -251,7 +402,7 @@ export class RichTextCanvas {
       const point = this.getCanvasPoint(event);
       const index = this.getIndexFromPoint(point.x, point.y);
 
-      this.focus();
+      this.focusEditor();
       this.isSelecting = true;
       this.moveCaret(index, event.shiftKey);
       this.selectionAnchor = index;
@@ -262,7 +413,9 @@ export class RichTextCanvas {
     window.addEventListener("mouseup", this.handleWindowMouseUp);
 
     this.canvas.addEventListener("keydown", (event) => this.onKeyDown(event));
+    this.canvas.addEventListener("keyup", (event) => this.emit("keyup", event));
     this.input.addEventListener("keydown", (event) => this.onKeyDown(event));
+    this.input.addEventListener("keyup", (event) => this.emit("keyup", event));
     this.input.addEventListener("compositionstart", () => {
       this.isComposing = true;
     });
@@ -270,6 +423,7 @@ export class RichTextCanvas {
     this.input.addEventListener("compositionend", () => {
       this.isComposing = false;
       const value = this.input.value;
+      this.emit("compositionend", value);
       if (value.length > 0) {
         this.insertText(value);
       }
@@ -302,6 +456,8 @@ export class RichTextCanvas {
   }
 
   private onKeyDown(event: KeyboardEvent): void {
+    this.emit("keydown", event);
+
     if (this.isComposing || event.isComposing || event.key === "Process") {
       return;
     }
@@ -353,7 +509,7 @@ export class RichTextCanvas {
     }
   }
 
-  private focus(): void {
+  private focusEditor(): void {
     this.canvas.focus();
     this.syncInputPosition();
     this.input.focus();
@@ -363,6 +519,7 @@ export class RichTextCanvas {
   }
 
   private insertText(text: string): void {
+    const hasSelection = this.selectionStart !== this.selectionEnd;
     this.deleteSelectionIfNeeded();
 
     const style = { ...this.currentStyle };
@@ -381,6 +538,11 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
+
+    this.emit("input", text);
+    if (hasSelection || text.length > 0) {
+      this.emit("change", this.getText());
+    }
   }
 
   private backspace(): void {
@@ -388,6 +550,7 @@ export class RichTextCanvas {
       this.rebuildLayout();
       this.resetBlink();
       this.render();
+      this.emit("change", this.getText());
       return;
     }
 
@@ -405,6 +568,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
+    this.emit("change", this.getText());
   }
 
   private deleteForward(): void {
@@ -412,6 +576,7 @@ export class RichTextCanvas {
       this.rebuildLayout();
       this.resetBlink();
       this.render();
+      this.emit("change", this.getText());
       return;
     }
 
@@ -428,6 +593,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
+    this.emit("change", this.getText());
   }
 
   private deleteSelectionIfNeeded(): boolean {
@@ -922,5 +1088,18 @@ export class RichTextCanvas {
 
   private resetBlink(): void {
     this.blinkVisible = true;
+  }
+
+  private emit(
+    event: "input" | "keydown" | "keyup" | "compositionend" | "change",
+    payload: string | KeyboardEvent,
+  ): void {
+    const handlers = this.eventHandlers[event];
+    if (!handlers || handlers.size === 0) {
+      return;
+    }
+    for (const handler of handlers) {
+      handler(payload as never);
+    }
   }
 }
