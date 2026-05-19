@@ -1,0 +1,16 @@
+# 忽略源码
+src/
+# 忽略配置文件
+tsconfig.json
+.prettierrc
+.eslintrc.js
+# 忽略日志/缓存
+*.log
+node_modules/
+# 忽略 git 相关
+.git
+.gitignore
+
+test
+web
+.env
