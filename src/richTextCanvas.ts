@@ -55,12 +55,14 @@ export class RichTextCanvas {
   private isDestroyed = false;
   private readonly eventHandlers: {
     input: Set<(text: string) => void>;
+    stop: Set<(t: { tokens: StyledToken[]; lines: LayoutLine[] }) => void>;
     keydown: Set<(event: KeyboardEvent) => void>;
     keyup: Set<(event: KeyboardEvent) => void>;
     compositionend: Set<(text: string) => void>;
     change: Set<(text: string) => void>;
   } = {
       input: new Set(),
+      stop: new Set(),
       keydown: new Set(),
       keyup: new Set(),
       compositionend: new Set(),
@@ -240,13 +242,15 @@ export class RichTextCanvas {
     this.hasFocus = false;
   }
 
-  show(): void {
+  show(x: number, y: number): void {
     if (this.isVisible) {
       return;
     }
     this.isVisible = true;
     this.canvas.style.display = "block";
     this.render();
+    this.setPos(x, y);
+    this.focus();
   }
 
   isHidden(): boolean {
@@ -310,7 +314,7 @@ export class RichTextCanvas {
   }
 
   addEventListener(
-    event: "input",
+    event: "input" | "stop",
     handler: Function,
   ): () => void {
     const callback = handler as (value: unknown) => void;
@@ -529,6 +533,11 @@ export class RichTextCanvas {
       event.preventDefault();
       if (event.shiftKey) {
         this.insertText("\n");
+      } else {
+        this.emit("stop", {
+          lines: this.lines,
+          tokens: this.tokens,
+        });
       }
     } else if (key === "a" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -1132,8 +1141,8 @@ export class RichTextCanvas {
   }
 
   private emit(
-    event: "input" | "keydown" | "keyup" | "compositionend" | "change",
-    payload: string | KeyboardEvent,
+    event: "input" | "stop" | "keydown" | "keyup" | "compositionend" | "change",
+    payload: string | KeyboardEvent | { tokens: StyledToken[]; lines: LayoutLine[] },
   ): void {
     const handlers = this.eventHandlers[event];
     if (!handlers || handlers.size === 0) {
