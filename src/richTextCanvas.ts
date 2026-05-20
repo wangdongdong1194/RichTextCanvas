@@ -240,6 +240,17 @@ export class RichTextCanvas {
     this.canvas.style.display = "none";
     this.input.blur();
     this.hasFocus = false;
+
+    // 清空内容和状态
+    this.tokens = [];
+    this.lines = [];
+    this.caretIndex = 0;
+    this.selectionStart = 0;
+    this.selectionEnd = 0;
+    this.selectionAnchor = null;
+    this.preferredCaretX = null;
+    this.rebuildLayout();
+    this.stopBlink();
   }
 
   show(x: number, y: number): void {
@@ -535,9 +546,10 @@ export class RichTextCanvas {
         this.insertText("\n");
       } else {
         this.emit("stop", {
-          lines: this.lines,
-          tokens: this.tokens,
+          lines: [...this.lines],
+          tokens: [...this.tokens],
         });
+        this.hide();
       }
     } else if (key === "a" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
