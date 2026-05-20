@@ -119,6 +119,7 @@ export class RichTextCanvas {
     this.canvas.style.display = "block";
     this.canvas.style.cursor = "text";
     this.canvas.tabIndex = 0;
+    this.canvas.style.position = "absolute";
 
     const context = this.canvas.getContext("2d");
     if (!context) {
@@ -201,10 +202,6 @@ export class RichTextCanvas {
   setPos(x: number, y: number): void {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return;
-    }
-    const computedPosition = window.getComputedStyle(this.canvas).position;
-    if (!this.canvas.style.position && computedPosition === "static") {
-      this.canvas.style.position = "relative";
     }
     this.canvas.style.left = `${Math.round(x)}px`;
     this.canvas.style.top = `${Math.round(y)}px`;
