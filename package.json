@@ -1,5 +1,5 @@
 {
-  "name": "rich-text-canvas",
+  "name": "rich_text_canvas",
   "version": "1.0.1",
   "description": "使用 Canvas 实现的富文本输入组件，支持多行输入、文本样式功能。",
   "main": "dist/index.js",
@@ -23,10 +23,10 @@
   ],
   "author": "wangdongdong1194",
   "license": "MIT",
-  "repository": "github:wangdongdong1194/RichTextCanvas",
-  "homepage": "https://github.com/wangdongdong1194/RichTextCanvas#readme",
+  "repository": "github:wangdongdong1194/rich_text_canvas",
+  "homepage": "https://github.com/wangdongdong1194/rich_text_canvas#readme",
   "bugs": {
-    "url": "https://github.com/wangdongdong1194/RichTextCanvas/issues"
+    "url": "https://github.com/wangdongdong1194/rich_text_canvas/issues"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
