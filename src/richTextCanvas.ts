@@ -5,6 +5,7 @@ import type {
   LayoutLine,
   StyledToken,
   TextStyle,
+  VerticalAlign,
 } from "./type";
 
 export class RichTextCanvas {
@@ -135,7 +136,6 @@ export class RichTextCanvas {
     this.applyCanvasSize(this.canvasCssWidth, this.canvasCssHeight);
 
     this.input = document.createElement("textarea");
-    this.input.setAttribute("aria-hidden", "true");
     this.input.style.position = "fixed";
     this.input.style.left = "-99999px";
     this.input.style.top = "-99999px";
@@ -274,7 +274,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
-    this.emit("change", this.getText());
+    this.emit("input", this.getText());
   }
 
   clear(): void {
@@ -313,7 +313,7 @@ export class RichTextCanvas {
   }
 
   addEventListener(
-    event: "input" | "keydown" | "keyup" | "compositionend" | "change",
+    event: "input",
     handler: Function,
   ): () => void {
     const callback = handler as (value: unknown) => void;
@@ -323,8 +323,48 @@ export class RichTextCanvas {
     };
   }
 
-  renderLine(): void {
-    this.render();
+  renderRichText(ctx: CanvasRenderingContext2D, devicePixelRatio: number, zoom: number, tokens: StyledToken[], lines: LayoutLine[], verticalAlign: VerticalAlign = 'bottom'): void {
+    const bitmapScale = zoom * devicePixelRatio;
+    // 根据配置设置 textBaseline
+    let textBaseline: CanvasTextBaseline = "top";
+    switch (verticalAlign) {
+      case "center":
+        textBaseline = "middle";
+        break;
+      case "bottom":
+        textBaseline = "bottom";
+        break;
+      case "top":
+      default:
+        textBaseline = "top";
+    }
+    ctx.textBaseline = textBaseline;
+
+    let activeFont = "";
+
+    for (const line of lines) {
+      for (const item of line.chars) {
+        const token = tokens[item.index];
+        if (!token) {
+          continue;
+        }
+
+        const nextFont = `${token.style.fontSize * bitmapScale}px ${token.style.fontFamily}`;
+        if (nextFont !== activeFont) {
+          ctx.font = nextFont;
+          activeFont = nextFont;
+        }
+        ctx.fillStyle = token.style.color;
+        // 计算 y 坐标
+        let y = line.y + 1;
+        if (verticalAlign === "center") {
+          y = line.y + line.height / 2;
+        } else if (verticalAlign === "bottom") {
+          y = line.y + line.height - 1;
+        }
+        ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
+      }
+    }
   }
 
   destroy(): void {
@@ -342,6 +382,10 @@ export class RichTextCanvas {
 
   getLines(): LayoutLine[] {
     return this.lines;
+  }
+
+  getToken(): StyledToken[] {
+    return this.tokens;
   }
 
   private bindEvents(): void {
@@ -423,7 +467,7 @@ export class RichTextCanvas {
     this.input.addEventListener("compositionend", () => {
       this.isComposing = false;
       const value = this.input.value;
-      this.emit("compositionend", value);
+      this.emit("input", value);
       if (value.length > 0) {
         this.insertText(value);
       }
@@ -541,7 +585,7 @@ export class RichTextCanvas {
 
     this.emit("input", text);
     if (hasSelection || text.length > 0) {
-      this.emit("change", this.getText());
+      this.emit("input", this.getText());
     }
   }
 
@@ -550,7 +594,7 @@ export class RichTextCanvas {
       this.rebuildLayout();
       this.resetBlink();
       this.render();
-      this.emit("change", this.getText());
+      this.emit("input", this.getText());
       return;
     }
 
@@ -568,7 +612,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
-    this.emit("change", this.getText());
+    this.emit("input", this.getText());
   }
 
   private deleteForward(): void {
@@ -576,7 +620,7 @@ export class RichTextCanvas {
       this.rebuildLayout();
       this.resetBlink();
       this.render();
-      this.emit("change", this.getText());
+      this.emit("input", this.getText());
       return;
     }
 
@@ -593,7 +637,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
-    this.emit("change", this.getText());
+    this.emit("input", this.getText());
   }
 
   private deleteSelectionIfNeeded(): boolean {
