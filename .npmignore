@@ -14,3 +14,5 @@ node_modules/
 test
 web
 .env
+index.html
+favicon.svg
