@@ -1,6 +1,6 @@
 {
   "name": "rich_text_canvas",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "使用 Canvas 实现的富文本输入组件，支持多行输入、文本样式功能。",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
