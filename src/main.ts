@@ -25,7 +25,11 @@ const canvasMount = document.createElement("div");
 canvasMount.style.width = `${editorWidth}px`;
 app.appendChild(canvasMount);
 
-const editor = new RichTextCanvas(canvasMount);
+const editor = new RichTextCanvas(canvasMount, {
+  padding: 10,
+  width: 200,
+  lineGap:0,
+});
 
 sizeRange.addEventListener("input", () => {
   const value = Number(sizeRange.value);

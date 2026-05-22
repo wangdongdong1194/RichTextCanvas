@@ -27,9 +27,9 @@ export class RichTextCanvas {
     selectionColor: "#62d1f3", // 选区背景色
     caretColor: "black", // 光标颜色
     defaultStyle: {
-      fontSize: 18, // 默认字体大小
-      fontFamily: "Georgia, serif", // 默认字体
-      color: "#222222", // 默认字体颜色
+      fontSize: 14, // 默认字体大小
+      fontFamily: "serif", // 默认字体
+      color: "#000000", // 默认字体颜色
     },
     verticalAlign: "bottom",
     minZoom: 0.1,
@@ -93,6 +93,7 @@ export class RichTextCanvas {
     this.preferredCaretX = null;
     this.resetBlink();
     this.render();
+    this.syncInputFromModel();
   };
   private readonly handleWindowMouseUp = (): void => {
     this.isSelecting = false;
@@ -234,6 +235,11 @@ export class RichTextCanvas {
   }
 
   hide(): void {
+    this.emit("stop", {
+      lines: [...this.lines],
+      tokens: [...this.tokens],
+    });
+
     if (!this.isVisible) {
       return;
     }
@@ -538,10 +544,6 @@ export class RichTextCanvas {
       if (event.shiftKey) {
         this.insertText("\n");
       } else {
-        this.emit("stop", {
-          lines: [...this.lines],
-          tokens: [...this.tokens],
-        });
         this.hide();
       }
     } else if (key === "a" && (event.metaKey || event.ctrlKey)) {
@@ -551,6 +553,7 @@ export class RichTextCanvas {
       this.caretIndex = this.tokens.length;
       this.selectionAnchor = 0;
       this.render();
+      this.syncInputFromModel();
     } else if (
       !isInputFocused &&
       !event.metaKey &&
@@ -729,6 +732,7 @@ export class RichTextCanvas {
     }
     this.resetBlink();
     this.render();
+    this.syncInputFromModel();
   }
 
   private rebuildLayout(): void {
