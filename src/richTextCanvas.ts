@@ -50,6 +50,7 @@ export class RichTextCanvas {
   private blinkTimer: number | null = null;
   private currentStyle: TextStyle;
   private isComposing = false;
+  private inputMirrorValue = "";
   private _zoom = 1;
   private isVisible = true;
   private isDestroyed = false;
@@ -249,6 +250,8 @@ export class RichTextCanvas {
     this.selectionEnd = 0;
     this.selectionAnchor = null;
     this.preferredCaretX = null;
+    this.inputMirrorValue = "";
+    this.input.value = "";
     this.rebuildLayout();
     this.stopBlink();
   }
@@ -286,6 +289,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
+    this.syncInputFromModel(true);
     this.emit("input", this.getText());
   }
 
@@ -420,6 +424,7 @@ export class RichTextCanvas {
         this.rebuildLayout();
         this.resetBlink();
         this.render();
+        this.syncInputFromModel();
       }
     });
 
@@ -474,29 +479,17 @@ export class RichTextCanvas {
     this.input.addEventListener("keyup", (event) => this.emit("keyup", event));
     this.input.addEventListener("compositionstart", () => {
       this.isComposing = true;
+      this.resetBlink();
+      this.syncInputPosition();
     });
 
     this.input.addEventListener("compositionend", () => {
       this.isComposing = false;
-      const value = this.input.value;
-      this.emit("input", value);
-      if (value.length > 0) {
-        this.insertText(value);
-      }
-      this.input.value = "";
+      this.applyInputDiff(this.input.value);
     });
 
-    this.input.addEventListener("input", (event) => {
-      const inputEvent = event as InputEvent;
-      if (this.isComposing || inputEvent.isComposing) {
-        return;
-      }
-
-      const value = this.input.value;
-      if (value.length > 0) {
-        this.insertText(value);
-      }
-      this.input.value = "";
+    this.input.addEventListener("input", () => {
+      this.applyInputDiff(this.input.value);
     });
 
     this.input.addEventListener("focus", () => {
@@ -540,7 +533,7 @@ export class RichTextCanvas {
       event.preventDefault();
       this.deleteForward();
     } else if (key === "Enter") {
-      // 仅 Shift+Enter 插入换行；普通 Enter 不执行输入。
+      // 仅 Shift+Enter 插入换行；普通 Enter 退出
       event.preventDefault();
       if (event.shiftKey) {
         this.insertText("\n");
@@ -565,15 +558,16 @@ export class RichTextCanvas {
       !event.altKey &&
       key.length === 1
     ) {
-      // Fallback only when textarea is not focused, to avoid duplicate IME chars.
+      // Printable text should always go through textarea input/composition events.
       event.preventDefault();
-      this.insertText(key);
+      this.focusEditor();
     }
   }
 
   private focusEditor(): void {
     this.canvas.focus();
     this.syncInputPosition();
+    this.syncInputFromModel(true);
     this.input.focus();
     this.hasFocus = true;
     this.resetBlink();
@@ -600,6 +594,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
+    this.syncInputFromModel();
 
     this.emit("input", text);
     if (hasSelection || text.length > 0) {
@@ -612,6 +607,7 @@ export class RichTextCanvas {
       this.rebuildLayout();
       this.resetBlink();
       this.render();
+      this.syncInputFromModel();
       this.emit("input", this.getText());
       return;
     }
@@ -630,6 +626,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
+    this.syncInputFromModel();
     this.emit("input", this.getText());
   }
 
@@ -638,6 +635,7 @@ export class RichTextCanvas {
       this.rebuildLayout();
       this.resetBlink();
       this.render();
+      this.syncInputFromModel();
       this.emit("input", this.getText());
       return;
     }
@@ -655,6 +653,7 @@ export class RichTextCanvas {
     this.rebuildLayout();
     this.resetBlink();
     this.render();
+    this.syncInputFromModel();
     this.emit("input", this.getText());
   }
 
@@ -858,6 +857,7 @@ export class RichTextCanvas {
         }
         totalHeight = line.y + line.height;
       }
+
       totalHeight += this.options.padding;
     } else {
       maxLineWidth = this.options.width;
@@ -1131,6 +1131,92 @@ export class RichTextCanvas {
 
   private getBitmapScale(): number {
     return this._zoom * this.devicePixelRatio;
+  }
+
+  private syncInputFromModel(force = false): void {
+    if (this.isComposing && !force) {
+      return;
+    }
+
+    const text = this.getText();
+    if (this.input.value !== text) {
+      this.input.value = text;
+    }
+    this.inputMirrorValue = text;
+
+    const [start, end] = this.getSelectionRange();
+    if (
+      this.input.selectionStart !== start ||
+      this.input.selectionEnd !== end
+    ) {
+      this.input.setSelectionRange(start, end);
+    }
+  }
+
+  private applyInputDiff(nextValue: string): void {
+    const prevValue = this.inputMirrorValue;
+    if (nextValue === prevValue) {
+      return;
+    }
+
+    const prevChars = Array.from(prevValue);
+    const nextChars = Array.from(nextValue);
+
+    let prefix = 0;
+    while (
+      prefix < prevChars.length &&
+      prefix < nextChars.length &&
+      prevChars[prefix] === nextChars[prefix]
+    ) {
+      prefix += 1;
+    }
+
+    let suffix = 0;
+    while (
+      suffix < prevChars.length - prefix &&
+      suffix < nextChars.length - prefix &&
+      prevChars[prevChars.length - 1 - suffix] ===
+      nextChars[nextChars.length - 1 - suffix]
+    ) {
+      suffix += 1;
+    }
+
+    const removedCount = prevChars.length - prefix - suffix;
+    const insertedChars = nextChars.slice(prefix, nextChars.length - suffix);
+    const style = { ...this.currentStyle };
+    const insertedTokens = insertedChars.map<StyledToken>((char) => ({
+      value: char,
+      style: { ...style },
+    }));
+
+    this.tokens.splice(prefix, removedCount, ...insertedTokens);
+
+    const selectionStart = this.codeUnitToCharIndex(
+      nextValue,
+      this.input.selectionStart ?? nextValue.length,
+    );
+    const selectionEnd = this.codeUnitToCharIndex(
+      nextValue,
+      this.input.selectionEnd ?? nextValue.length,
+    );
+
+    this.selectionStart = this.clampIndex(selectionStart);
+    this.selectionEnd = this.clampIndex(selectionEnd);
+    this.caretIndex = this.selectionEnd;
+    this.selectionAnchor =
+      this.selectionStart === this.selectionEnd ? null : this.selectionStart;
+    this.preferredCaretX = null;
+
+    this.inputMirrorValue = nextValue;
+    this.rebuildLayout();
+    this.resetBlink();
+    this.render();
+    this.emit("input", this.getText());
+  }
+
+  private codeUnitToCharIndex(text: string, codeUnitIndex: number): number {
+    const normalized = Math.max(0, Math.min(text.length, codeUnitIndex));
+    return Array.from(text.slice(0, normalized)).length;
   }
 
   private startBlink(): void {
