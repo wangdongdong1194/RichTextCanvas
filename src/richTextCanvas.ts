@@ -4,8 +4,8 @@ import type {
   LayoutChar,
   LayoutLine,
   StyledToken,
+  TextBaseline,
   TextStyle,
-  VerticalAlign,
 } from "./type";
 
 export class RichTextCanvas {
@@ -31,7 +31,7 @@ export class RichTextCanvas {
       fontFamily: "serif", // 默认字体
       color: "#000000", // 默认字体颜色
     },
-    verticalAlign: "bottom",
+    textBaseline: "bottom",
     minZoom: 0.1,
   };
   private readonly input: HTMLTextAreaElement;
@@ -111,7 +111,7 @@ export class RichTextCanvas {
         ...this.options.defaultStyle,
         ...options?.defaultStyle,
       },
-      verticalAlign: options?.verticalAlign || this.options.verticalAlign,
+      textBaseline: options?.textBaseline || this.options.textBaseline,
     };
 
     this.currentStyle = { ...this.options.defaultStyle };
@@ -345,21 +345,9 @@ export class RichTextCanvas {
     };
   }
 
-  renderRichText(ctx: CanvasRenderingContext2D, devicePixelRatio: number, zoom: number, tokens: StyledToken[], lines: LayoutLine[], verticalAlign: VerticalAlign = 'bottom'): void {
+  renderRichText(ctx: CanvasRenderingContext2D, devicePixelRatio: number, zoom: number, tokens: StyledToken[], lines: LayoutLine[], textBaseline: TextBaseline = 'top'): void {
     const bitmapScale = zoom * devicePixelRatio;
     // 根据配置设置 textBaseline
-    let textBaseline: CanvasTextBaseline = "top";
-    switch (verticalAlign) {
-      case "center":
-        textBaseline = "middle";
-        break;
-      case "bottom":
-        textBaseline = "bottom";
-        break;
-      case "top":
-      default:
-        textBaseline = "top";
-    }
     ctx.textBaseline = textBaseline;
 
     let activeFont = "";
@@ -379,9 +367,9 @@ export class RichTextCanvas {
         ctx.fillStyle = token.style.color;
         // 计算 y 坐标
         let y = line.y + 1;
-        if (verticalAlign === "center") {
+        if (textBaseline === "middle") {
           y = line.y + line.height / 2;
-        } else if (verticalAlign === "bottom") {
+        } else if (textBaseline === "bottom") {
           y = line.y + line.height - 1;
         }
         ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
@@ -907,20 +895,7 @@ export class RichTextCanvas {
     this.ctx.fillStyle = this.options.background;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // 根据配置设置 textBaseline
-    let textBaseline: CanvasTextBaseline = "top";
-    switch (this.options.verticalAlign) {
-      case "center":
-        textBaseline = "middle";
-        break;
-      case "bottom":
-        textBaseline = "bottom";
-        break;
-      case "top":
-      default:
-        textBaseline = "top";
-    }
-    this.ctx.textBaseline = textBaseline;
+    this.ctx.textBaseline = this.options.textBaseline;
 
     let activeFont = "";
 
@@ -949,9 +924,9 @@ export class RichTextCanvas {
         this.ctx.fillStyle = token.style.color;
         // 计算 y 坐标
         let y = line.y + 1;
-        if (this.options.verticalAlign === "center") {
+        if (this.options.textBaseline === "middle") {
           y = line.y + line.height / 2;
-        } else if (this.options.verticalAlign === "bottom") {
+        } else if (this.options.textBaseline === "bottom") {
           y = line.y + line.height - 1;
         }
         this.ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
@@ -990,9 +965,9 @@ export class RichTextCanvas {
       const height = Math.max(12, Math.floor(caretHeight - 2));
       // 计算 y 坐标
       let y = caret.y + 1;
-      if (this.options.verticalAlign === "center") {
+      if (this.options.textBaseline === "middle") {
         y = caret.y + (caret.lineHeight - height) / 2;
-      } else if (this.options.verticalAlign === "bottom") {
+      } else if (this.options.textBaseline === "bottom") {
         y = caret.y + caret.lineHeight - height - 1;
       }
       this.ctx.fillStyle = this.options.caretColor;

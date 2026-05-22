@@ -33,7 +33,7 @@ export interface LayoutLine {
   chars: LayoutChar[];
 }
 
-export type VerticalAlign = "top" | "center" | "bottom";
+export type TextBaseline = "top" | "middle" | "bottom";
 
 export interface EditorOptions {
   width: number;
@@ -46,6 +46,6 @@ export interface EditorOptions {
   selectionColor: string;
   caretColor: string;
   defaultStyle: TextStyle;
-  verticalAlign: VerticalAlign;
+  textBaseline: TextBaseline;
   minZoom: number;
 }
