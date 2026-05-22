@@ -744,7 +744,7 @@ export class RichTextCanvas {
     let lineIndex = 0;
     let lineStart = 0;
     let lineY = padding;
-    let lineHeight = this.options.defaultStyle.fontSize * 1.35;
+    let lineHeight = this.getDefaultLineHeight();
     let cursorX = padding;
 
     let chars: LayoutChar[] = [];
@@ -772,7 +772,7 @@ export class RichTextCanvas {
         lineIndex += 1;
         lineStart = i + 1;
         lineY += lineHeight + this.options.lineGap;
-        lineHeight = this.options.defaultStyle.fontSize * 1.35;
+        lineHeight = this.getDefaultLineHeight();
         cursorX = padding;
         chars = [];
         continue;
@@ -782,7 +782,7 @@ export class RichTextCanvas {
 
       // 不做自动换行，所有内容都在同一行，除非遇到 \n
 
-      lineHeight = Math.max(lineHeight, token.style.fontSize * 1.35);
+      lineHeight = Math.max(lineHeight, this.getTextHeight(token));
 
       chars.push({
         index: i,
@@ -1106,7 +1106,7 @@ export class RichTextCanvas {
       x: this.options.padding,
       y: this.options.padding,
       lineIndex: 0,
-      lineHeight: this.options.defaultStyle.fontSize * 1.35,
+      lineHeight: this.getDefaultLineHeight(),
     };
   }
 
@@ -1131,6 +1131,29 @@ export class RichTextCanvas {
     }
     this.measureCache.set(key, width);
     return width;
+  }
+
+  private getTextHeight(token: StyledToken): number {
+    const font = `${token.style.fontSize}px ${token.style.fontFamily}`;
+    this.measureCtx.font = font;
+    const metrics = this.measureCtx.measureText(token.value);
+
+    const ascent = metrics.fontBoundingBoxAscent;
+    const descent = metrics.fontBoundingBoxDescent;
+    const boundingHeight = ascent + descent;
+
+    if (Number.isFinite(boundingHeight) && boundingHeight > 0) {
+      return Math.max(1, boundingHeight);
+    }
+
+    return token.style.fontSize * 1.35;
+  }
+
+  private getDefaultLineHeight(): number {
+    return this.getTextHeight({
+      value: "M",
+      style: this.options.defaultStyle,
+    });
   }
 
   private getBitmapScale(): number {

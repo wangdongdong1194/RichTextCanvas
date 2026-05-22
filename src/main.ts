@@ -26,9 +26,12 @@ canvasMount.style.width = `${editorWidth}px`;
 app.appendChild(canvasMount);
 
 const editor = new RichTextCanvas(canvasMount, {
-  padding: 10,
-  width: 200,
-  lineGap:0,
+  verticalAlign: "bottom",
+  defaultStyle: {
+    fontSize: 28,
+    fontFamily: "serif",
+    color: "#222222"
+  }
 });
 
 sizeRange.addEventListener("input", () => {
