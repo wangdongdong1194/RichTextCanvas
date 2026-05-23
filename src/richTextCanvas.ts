@@ -31,7 +31,7 @@ export class RichTextCanvas {
       fontFamily: "serif", // 默认字体
       color: "#000000", // 默认字体颜色
     },
-    textBaseline: "bottom",
+    textBaseline: "middle",
     minZoom: 0.1,
   };
   private readonly input: HTMLTextAreaElement;
