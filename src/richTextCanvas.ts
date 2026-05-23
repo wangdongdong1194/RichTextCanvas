@@ -986,7 +986,7 @@ export class RichTextCanvas {
           activeFont = nextFont;
         }
         ctx.fillStyle = token.style.color;
-        const y = this.getBaselineY(line.y, line.height, textBaseline, line.boxDescent / 2);
+        const y = this.getBaselineY(line.y, line.height, textBaseline, textBaseline === "middle" ? 0 : line.boxDescent / 2);
         ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
       }
     }
