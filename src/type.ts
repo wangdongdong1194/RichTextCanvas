@@ -31,6 +31,7 @@ export interface LayoutLine {
   start: number;
   end: number;
   chars: LayoutChar[];
+  boxDescent: number; // 字符下方的距离，用于调整基线位置
 }
 
 export type TextBaseline = "top" | "middle" | "bottom";

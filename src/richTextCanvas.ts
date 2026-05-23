@@ -680,6 +680,10 @@ export class RichTextCanvas {
 
   private rebuildLayout(): void {
     const padding = this.options.padding;
+    const defaultBox = this.measureTextBox({
+      value: "M",
+      style: this.options.defaultStyle,
+    });
 
     this.lines = [];
     this.caretPositions = [];
@@ -687,12 +691,19 @@ export class RichTextCanvas {
     let lineIndex = 0;
     let lineStart = 0;
     let lineY = padding;
-    let lineHeight = this.getDefaultLineHeight();
+    let lineHeight = defaultBox.height; // 初始行高为默认值，遇到内容时会根据字符高度动态调整
+    let lineDescent = defaultBox.descent; // 默认的字符下方距离，用于调整基线位置，使光标垂直居中
     let cursorX = padding;
 
     let chars: LayoutChar[] = [];
 
     const pushLine = (end: number): void => {
+      if (this.lines.length > 0) {
+        const prevLine = this.lines[this.lines.length - 1];
+        if (prevLine) {
+          prevLine.boxDescent = lineDescent;
+        }
+      }
       this.lines.push({
         index: lineIndex,
         y: lineY,
@@ -700,6 +711,7 @@ export class RichTextCanvas {
         start: lineStart,
         end,
         chars,
+        boxDescent: lineDescent,
       });
     };
 
@@ -714,18 +726,21 @@ export class RichTextCanvas {
 
         lineIndex += 1;
         lineStart = i + 1;
-        lineY += lineHeight + this.options.lineGap;
-        lineHeight = this.getDefaultLineHeight();
+        lineY += lineHeight + this.options.lineGap; // 换行时根据当前行高和行间距调整 y 位置
+        lineHeight = defaultBox.height;
+        lineDescent = defaultBox.descent;
         cursorX = padding;
         chars = [];
         continue;
       }
 
       const width = this.getCharWidth(token);
+      const textBox = this.measureTextBox(token);
 
       // 不做自动换行，所有内容都在同一行，除非遇到 \n
 
-      lineHeight = Math.max(lineHeight, this.getTextHeight(token));
+      lineHeight = Math.max(lineHeight, textBox.height);
+      lineDescent = Math.max(lineDescent, textBox.descent);
 
       chars.push({
         index: i,
@@ -859,7 +874,7 @@ export class RichTextCanvas {
       start,
       end,
     );
-
+    // 绘制光标
     if (this.hasFocus && this.blinkVisible && start === end) {
       const caret = this.getCaretPosition(this.caretIndex);
       const currentLine = this.lines[caret.lineIndex];
@@ -876,11 +891,11 @@ export class RichTextCanvas {
 
         const leftHeight =
           leftToken && leftToken.value !== "\n"
-            ? this.getTextHeight(leftToken)
+            ? this.measureTextBox(leftToken).height
             : 0;
         const rightHeight =
           rightToken && rightToken.value !== "\n"
-            ? this.getTextHeight(rightToken)
+            ? this.measureTextBox(rightToken).height
             : 0;
 
         const neighborHeight = Math.max(leftHeight, rightHeight);
@@ -929,7 +944,7 @@ export class RichTextCanvas {
     // this.ctx.lineWidth = this.hasFocus ? 2 : 1;
     // this.ctx.strokeRect(1, 1, this.options.width - 2, this.options.height - 2);
   }
-
+  // 绘制选中区域和文本
   private drawTokens(
     ctx: CanvasRenderingContext2D,
     bitmapScale: number,
@@ -949,7 +964,7 @@ export class RichTextCanvas {
         if (!token) {
           continue;
         }
-
+        // 绘制选中背景
         if (
           selectionStart !== undefined &&
           selectionEnd !== undefined &&
@@ -964,14 +979,14 @@ export class RichTextCanvas {
             line.height * bitmapScale,
           );
         }
-
+        // 绘制文本
         const nextFont = `${token.style.fontSize * bitmapScale}px ${token.style.fontFamily}`;
         if (nextFont !== activeFont) {
           ctx.font = nextFont;
           activeFont = nextFont;
         }
         ctx.fillStyle = token.style.color;
-        const y = this.getBaselineY(line.y, line.height, textBaseline);
+        const y = this.getBaselineY(line.y, line.height, textBaseline, line.boxDescent / 2);
         ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
       }
     }
@@ -1054,7 +1069,10 @@ export class RichTextCanvas {
       x: this.options.padding,
       y: this.options.padding,
       lineIndex: 0,
-      lineHeight: this.getDefaultLineHeight(),
+      lineHeight: this.measureTextBox({
+        value: "M",
+        style: this.options.defaultStyle,
+      }).height,
     };
   }
 
@@ -1081,7 +1099,7 @@ export class RichTextCanvas {
     return width;
   }
 
-  private getTextHeight(token: StyledToken): number {
+  private measureTextBox(token: StyledToken): { height: number; descent: number } {
     const font = `${token.style.fontSize}px ${token.style.fontFamily}`;
     this.measureCtx.font = font;
     const metrics = this.measureCtx.measureText(token.value);
@@ -1091,17 +1109,16 @@ export class RichTextCanvas {
     const boundingHeight = ascent + descent;
 
     if (Number.isFinite(boundingHeight) && boundingHeight > 0) {
-      return Math.max(1, boundingHeight);
+      return {
+        height: boundingHeight,
+        descent: Number.isFinite(descent) && descent > 0 ? descent : token.style.fontSize * 0.35,
+      };
     }
 
-    return token.style.fontSize * 1.35;
-  }
-
-  private getDefaultLineHeight(): number {
-    return this.getTextHeight({
-      value: "M",
-      style: this.options.defaultStyle,
-    });
+    return {
+      height: token.style.fontSize * 1.35, // fallback, 1.35 是经验值，实际可能因字体而异
+      descent: token.style.fontSize * 0.35, // fallback, 0.35 是经验值，实际可能因字体而异
+    };
   }
 
   private getBaselineY(
