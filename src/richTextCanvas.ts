@@ -347,34 +347,7 @@ export class RichTextCanvas {
 
   renderRichText(ctx: CanvasRenderingContext2D, devicePixelRatio: number, zoom: number, tokens: StyledToken[], lines: LayoutLine[], textBaseline: TextBaseline = 'top'): void {
     const bitmapScale = zoom * devicePixelRatio;
-    // 根据配置设置 textBaseline
-    ctx.textBaseline = textBaseline;
-
-    let activeFont = "";
-
-    for (const line of lines) {
-      for (const item of line.chars) {
-        const token = tokens[item.index];
-        if (!token) {
-          continue;
-        }
-
-        const nextFont = `${token.style.fontSize * bitmapScale}px ${token.style.fontFamily}`;
-        if (nextFont !== activeFont) {
-          ctx.font = nextFont;
-          activeFont = nextFont;
-        }
-        ctx.fillStyle = token.style.color;
-        // 计算 y 坐标
-        let y = line.y + 1;
-        if (textBaseline === "middle") {
-          y = line.y + line.height / 2;
-        } else if (textBaseline === "bottom") {
-          y = line.y + line.height - 1;
-        }
-        ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
-      }
-    }
+    this.drawTokens(ctx, bitmapScale, tokens, lines, textBaseline);
   }
 
   destroy(): void {
@@ -415,10 +388,7 @@ export class RichTextCanvas {
           (event as ClipboardEvent).clipboardData!.setData("text/plain", text);
         }
         this.deleteSelectionIfNeeded();
-        this.rebuildLayout();
-        this.resetBlink();
-        this.render();
-        this.syncInputFromModel();
+        this.refreshAfterContentChange();
       }
     });
 
@@ -582,10 +552,7 @@ export class RichTextCanvas {
     this.selectionAnchor = null;
     this.preferredCaretX = null;
 
-    this.rebuildLayout();
-    this.resetBlink();
-    this.render();
-    this.syncInputFromModel();
+    this.refreshAfterContentChange();
 
     this.emit("input", text);
     if (hasSelection || text.length > 0) {
@@ -595,10 +562,7 @@ export class RichTextCanvas {
 
   private backspace(): void {
     if (this.deleteSelectionIfNeeded()) {
-      this.rebuildLayout();
-      this.resetBlink();
-      this.render();
-      this.syncInputFromModel();
+      this.refreshAfterContentChange();
       this.emit("input", this.getText());
       return;
     }
@@ -614,19 +578,13 @@ export class RichTextCanvas {
     this.selectionAnchor = null;
     this.preferredCaretX = null;
 
-    this.rebuildLayout();
-    this.resetBlink();
-    this.render();
-    this.syncInputFromModel();
+    this.refreshAfterContentChange();
     this.emit("input", this.getText());
   }
 
   private deleteForward(): void {
     if (this.deleteSelectionIfNeeded()) {
-      this.rebuildLayout();
-      this.resetBlink();
-      this.render();
-      this.syncInputFromModel();
+      this.refreshAfterContentChange();
       this.emit("input", this.getText());
       return;
     }
@@ -641,10 +599,7 @@ export class RichTextCanvas {
     this.selectionAnchor = null;
     this.preferredCaretX = null;
 
-    this.rebuildLayout();
-    this.resetBlink();
-    this.render();
-    this.syncInputFromModel();
+    this.refreshAfterContentChange();
     this.emit("input", this.getText());
   }
 
@@ -895,43 +850,15 @@ export class RichTextCanvas {
     this.ctx.fillStyle = this.options.background;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    this.ctx.textBaseline = this.options.textBaseline;
-
-    let activeFont = "";
-
-    for (const line of this.lines) {
-      for (const item of line.chars) {
-        const token = this.tokens[item.index];
-        if (!token) {
-          continue;
-        }
-
-        if (item.index >= start && item.index < end) {
-          this.ctx.fillStyle = this.options.selectionColor;
-          this.ctx.fillRect(
-            item.x * bitmapScale,
-            line.y * bitmapScale,
-            item.width * bitmapScale,
-            line.height * bitmapScale,
-          );
-        }
-
-        const nextFont = `${token.style.fontSize * bitmapScale}px ${token.style.fontFamily}`;
-        if (nextFont !== activeFont) {
-          this.ctx.font = nextFont;
-          activeFont = nextFont;
-        }
-        this.ctx.fillStyle = token.style.color;
-        // 计算 y 坐标
-        let y = line.y + 1;
-        if (this.options.textBaseline === "middle") {
-          y = line.y + line.height / 2;
-        } else if (this.options.textBaseline === "bottom") {
-          y = line.y + line.height - 1;
-        }
-        this.ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
-      }
-    }
+    this.drawTokens(
+      this.ctx,
+      bitmapScale,
+      this.tokens,
+      this.lines,
+      this.options.textBaseline,
+      start,
+      end,
+    );
 
     if (this.hasFocus && this.blinkVisible && start === end) {
       const caret = this.getCaretPosition(this.caretIndex);
@@ -949,11 +876,11 @@ export class RichTextCanvas {
 
         const leftHeight =
           leftToken && leftToken.value !== "\n"
-            ? leftToken.style.fontSize * 1.35
+            ? this.getTextHeight(leftToken)
             : 0;
         const rightHeight =
           rightToken && rightToken.value !== "\n"
-            ? rightToken.style.fontSize * 1.35
+            ? this.getTextHeight(rightToken)
             : 0;
 
         const neighborHeight = Math.max(leftHeight, rightHeight);
@@ -963,13 +890,12 @@ export class RichTextCanvas {
       }
 
       const height = Math.max(12, Math.floor(caretHeight - 2));
-      // 计算 y 坐标
-      let y = caret.y + 1;
-      if (this.options.textBaseline === "middle") {
-        y = caret.y + (caret.lineHeight - height) / 2;
-      } else if (this.options.textBaseline === "bottom") {
-        y = caret.y + caret.lineHeight - height - 1;
-      }
+      const y = this.getBaselineY(
+        caret.y,
+        caret.lineHeight,
+        this.options.textBaseline,
+        height,
+      );
       this.ctx.fillStyle = this.options.caretColor;
       this.ctx.fillRect(
         caret.x * bitmapScale,
@@ -1002,6 +928,53 @@ export class RichTextCanvas {
     // this.ctx.strokeStyle = this.hasFocus ? "green" : "#d8dde6";
     // this.ctx.lineWidth = this.hasFocus ? 2 : 1;
     // this.ctx.strokeRect(1, 1, this.options.width - 2, this.options.height - 2);
+  }
+
+  private drawTokens(
+    ctx: CanvasRenderingContext2D,
+    bitmapScale: number,
+    tokens: StyledToken[],
+    lines: LayoutLine[],
+    textBaseline: TextBaseline,
+    selectionStart?: number,
+    selectionEnd?: number,
+  ): void {
+    ctx.textBaseline = textBaseline;
+
+    let activeFont = "";
+
+    for (const line of lines) {
+      for (const item of line.chars) {
+        const token = tokens[item.index];
+        if (!token) {
+          continue;
+        }
+
+        if (
+          selectionStart !== undefined &&
+          selectionEnd !== undefined &&
+          item.index >= selectionStart &&
+          item.index < selectionEnd
+        ) {
+          ctx.fillStyle = this.options.selectionColor;
+          ctx.fillRect(
+            item.x * bitmapScale,
+            line.y * bitmapScale,
+            item.width * bitmapScale,
+            line.height * bitmapScale,
+          );
+        }
+
+        const nextFont = `${token.style.fontSize * bitmapScale}px ${token.style.fontFamily}`;
+        if (nextFont !== activeFont) {
+          ctx.font = nextFont;
+          activeFont = nextFont;
+        }
+        ctx.fillStyle = token.style.color;
+        const y = this.getBaselineY(line.y, line.height, textBaseline);
+        ctx.fillText(token.value, item.x * bitmapScale, y * bitmapScale);
+      }
+    }
   }
 
   private getCanvasPoint(event: MouseEvent): { x: number; y: number } {
@@ -1129,6 +1102,30 @@ export class RichTextCanvas {
       value: "M",
       style: this.options.defaultStyle,
     });
+  }
+
+  private getBaselineY(
+    lineY: number,
+    lineHeight: number,
+    baseline: TextBaseline,
+    boxHeight = 0,
+  ): number {
+    if (baseline === "middle") {
+      return lineY + (lineHeight - boxHeight) / 2;
+    }
+    if (baseline === "bottom") {
+      return lineY + lineHeight - (boxHeight || 1);
+    }
+    return lineY + 1;
+  }
+
+  private refreshAfterContentChange(syncInput = true): void {
+    this.rebuildLayout();
+    this.resetBlink();
+    this.render();
+    if (syncInput) {
+      this.syncInputFromModel();
+    }
   }
 
   private getBitmapScale(): number {
